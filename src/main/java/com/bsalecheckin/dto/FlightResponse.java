@@ -1,3 +1,7 @@
 package com.bsalecheckin.dto;
 
-public record FlightResponse(int code, Object data, String errors) {}
+public record FlightResponse(
+  Integer code,
+  Object data,
+  String errors
+) {}

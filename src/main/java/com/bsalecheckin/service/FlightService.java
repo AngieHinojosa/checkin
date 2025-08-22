@@ -5,6 +5,7 @@ import com.bsalecheckin.dto.PassengerDto;
 import com.bsalecheckin.exception.FlightNotFoundException;
 import com.bsalecheckin.repository.FlightRepository;
 import com.bsalecheckin.repository.PassengerRepository;
+import com.bsalecheckin.repository.SeatRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,16 +14,29 @@ import java.util.List;
 public class FlightService {
   private final FlightRepository flights;
   private final PassengerRepository passengers;
+  private final SeatRepository seats;
 
-  public FlightService(FlightRepository flights, PassengerRepository passengers) {
+  public FlightService(FlightRepository flights, PassengerRepository passengers, SeatRepository seats) {
     this.flights = flights;
     this.passengers = passengers;
+    this.seats = seats;
   }
 
   public FlightData getFlightData(Long flightId) {
     var row = flights.findRowById(flightId).orElseThrow(FlightNotFoundException::new);
     var pax = passengers.findByFlight(flightId);
-    return toFlightData(row, pax);
+    var data = toFlightData(row, pax);
+    var allSeats = seats.findByAirplane(data.airplaneId());
+    var assigned = new SeatAssigner(allSeats, data.passengers()).assign();
+    return new FlightData(
+      data.flightId(),
+      data.takeoffDateTime(),
+      data.takeoffAirport(),
+      data.landingDateTime(),
+      data.landingAirport(),
+      data.airplaneId(),
+      assigned
+    );
   }
 
   private FlightData toFlightData(Object[] r, List<PassengerDto> pax) {

@@ -19,12 +19,12 @@ public class PassengerRepository {
     try {
       var q = em.createNativeQuery("""
         SELECT
-          p.passenger_id, p.dni, p.name, p.age, p.country,
-          bp.boarding_pass_id, bp.purchase_id, bp.seat_type_id, bp.seat_id
-        FROM boarding_pass bp
-        JOIN passenger p ON p.passenger_id = bp.passenger_id
-        WHERE bp.flight_id = ?
-        ORDER BY bp.purchase_id, bp.boarding_pass_id
+          p.`passenger_id`, p.`dni`, p.`name`, p.`age`, p.`country`,
+          bp.`boarding_pass_id`, bp.`purchase_id`, bp.`seat_type_id`, bp.`seat_id`
+        FROM `boarding_pass` bp
+        JOIN `passenger` p ON p.`passenger_id` = bp.`passenger_id`
+        WHERE bp.`flight_id` = ?
+        ORDER BY bp.`purchase_id`, bp.`boarding_pass_id`
       """);
       q.setParameter(1, flightId);
 
@@ -35,7 +35,7 @@ public class PassengerRepository {
           ((Number) r[0]).longValue(),
           (String) r[1],
           (String) r[2],
-          ((Number) r[3]).intValue(),
+          r[3] == null ? null : ((Number) r[3]).intValue(),
           (String) r[4],
           ((Number) r[5]).longValue(),
           ((Number) r[6]).longValue(),
