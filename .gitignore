@@ -1,0 +1,28 @@
+# Maven / Java
+target/
+.mvn/
+pom.xml.versionsBackup
+*.log
+*.class
+hs_err_pid*
+replay_pid*
+
+# IDEs
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+
+# Proyecto (no necesario en repo)
+airline.sql
