@@ -5,33 +5,48 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>bsale-checkin API</title>
 <style>
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;margin:24px}
-  h1{margin:0 0 12px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-  input,button{font-size:14px;padding:8px 12px}
-  pre{background:#0b1021;color:#d7e3ff;padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
-  a{color:#0b69ff;text-decoration:none}
+  :root{--bg:#0b1021;--fg:#e6ecff;--chip:#eef3ff;--link:#0b69ff}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;margin:28px}
+  h1{margin:0 0 16px}
+  .bar{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+  button,input{font-size:14px;padding:8px 12px;border-radius:8px;border:1px solid #d6dbe8}
+  input{width:110px}
+  a{color:var(--link);text-decoration:none}
+  .links{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0 18px}
+  .hint{background:var(--chip);padding:10px 12px;border-radius:10px;margin:12px 0;color:#2a355b}
+  pre{background:var(--bg);color:var(--fg);padding:14px;border-radius:12px;overflow:auto;max-height:65vh}
+  small{opacity:.8}
 </style>
 </head>
 <body>
   <h1>bsale-checkin API</h1>
-  <div class="row">
+
+  <div class="hint">
+    <b>Cómo probar aquí:</b> usa los botones para llamar a la API y ver el JSON (<i>pretty-print</i>).
+    La evaluación oficial considera el endpoint <code>GET /flights/{id}/passengers</code> y sus códigos 200/404/400 (camelCase). 
+  </div>
+
+  <div class="bar">
     <button id="btn-status">GET /status</button>
-    <input id="fid" type="number" min="1" placeholder="1">
+    <input id="fid" type="number" min="1" placeholder="1" aria-label="flight id">
     <button id="btn-flight">GET /flights/{id}/passengers</button>
     <button id="btn-404">GET /flights/999999/passengers</button>
   </div>
-  <div class="row">
+
+  <div class="links">
     <a href="/status" target="_blank">Abrir /status</a>
     <a href="/flights/1/passengers" target="_blank">Abrir /flights/1/passengers</a>
     <a href="/flights/999999/passengers" target="_blank">Abrir /flights/999999/passengers</a>
   </div>
+
   <pre id="out">Haz clic en un botón para probar.</pre>
+  <small>Tip: también puedes usar <code>curl</code> o Postman contra esta URL.</small>
+
 <script>
 async function hit(u){
   const r=await fetch(u,{headers:{'Accept':'application/json'}});
-  let bodyText=await r.text(); try{bodyText=JSON.stringify(JSON.parse(bodyText),null,2)}catch(_){}
-  document.getElementById('out').textContent=`${u}\nHTTP ${r.status}\n\n${bodyText}`;
+  let body=await r.text(); try{body=JSON.stringify(JSON.parse(body),null,2)}catch(_){}
+  document.getElementById('out').textContent = `${u}\nHTTP ${r.status}\n\n${body}`;
 }
 document.getElementById('btn-status').onclick=()=>hit('/status');
 document.getElementById('btn-flight').onclick=()=>hit(`/flights/${document.getElementById('fid').value||'1'}/passengers`);
