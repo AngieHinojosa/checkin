@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>bsale-checkin API</title>
+<style>
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;margin:24px}
+  h1{margin:0 0 12px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+  input,button{font-size:14px;padding:8px 12px}
+  pre{background:#0b1021;color:#d7e3ff;padding:12px;border-radius:8px;overflow:auto;max-height:60vh}
+  a{color:#0b69ff;text-decoration:none}
+</style>
+</head>
+<body>
+  <h1>bsale-checkin API</h1>
+  <div class="row">
+    <button id="btn-status">GET /status</button>
+    <input id="fid" type="number" min="1" placeholder="1">
+    <button id="btn-flight">GET /flights/{id}/passengers</button>
+    <button id="btn-404">GET /flights/999999/passengers</button>
+  </div>
+  <div class="row">
+    <a href="/status" target="_blank">Abrir /status</a>
+    <a href="/flights/1/passengers" target="_blank">Abrir /flights/1/passengers</a>
+    <a href="/flights/999999/passengers" target="_blank">Abrir /flights/999999/passengers</a>
+  </div>
+  <pre id="out">Haz clic en un botón para probar.</pre>
+<script>
+async function hit(u){
+  const r=await fetch(u,{headers:{'Accept':'application/json'}});
+  let bodyText=await r.text(); try{bodyText=JSON.stringify(JSON.parse(bodyText),null,2)}catch(_){}
+  document.getElementById('out').textContent=`${u}\nHTTP ${r.status}\n\n${bodyText}`;
+}
+document.getElementById('btn-status').onclick=()=>hit('/status');
+document.getElementById('btn-flight').onclick=()=>hit(`/flights/${document.getElementById('fid').value||'1'}/passengers`);
+document.getElementById('btn-404').onclick=()=>hit('/flights/999999/passengers');
+</script>
+</body>
+</html>
