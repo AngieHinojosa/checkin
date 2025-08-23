@@ -7,251 +7,178 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class SeatAssigner {
-  private final List<SeatSlot> allSeats;
+  private final List<SeatSlot> seats;
   private final List<PassengerDto> passengers;
 
-  public SeatAssigner(List<SeatSlot> allSeats, List<PassengerDto> passengers) {
-    this.allSeats = allSeats;
+  public SeatAssigner(List<SeatSlot> seats, List<PassengerDto> passengers) {
+    this.seats = seats;
     this.passengers = passengers;
   }
 
-  public List<PassengerDto> assign() {
-    var takenSeatIds = passengers.stream().map(PassengerDto::seatId).filter(Objects::nonNull).collect(Collectors.toSet());
-    var seatById = allSeats.stream().collect(Collectors.toMap(SeatSlot::seatId, s -> s));
-    var freeByTypeByRow = new HashMap<Integer, TreeMap<Integer, List<SeatSlot>>>();
-    for (var s : allSeats) {
-      if (takenSeatIds.contains(s.seatId())) continue;
-      freeByTypeByRow.computeIfAbsent(s.seatTypeId(), k -> new TreeMap<>())
-        .computeIfAbsent(s.row(), k -> new ArrayList<>()).add(s);
-    }
-    for (var map : freeByTypeByRow.values()) for (var list : map.values())
-      list.sort(Comparator.comparingInt(a -> colIndex(a.col())));
+  public List<PassengerDto> assignAll() {
+    var occupied = passengers.stream()
+        .map(PassengerDto::seatId)
+        .filter(Objects::nonNull)
+        .collect(Collectors.toSet());
 
-    var assignedByBp = new HashMap<Long, Long>();
-    var groups = passengers.stream().collect(Collectors.groupingBy(PassengerDto::purchaseId, LinkedHashMap::new, Collectors.toList()));
+    var freeSeats = seats.stream()
+        .filter(s -> !occupied.contains(s.seatId()))
+        .collect(Collectors.toList());
 
-    for (var group : groups.values()) {
-      var byType = group.stream().collect(Collectors.groupingBy(PassengerDto::seatTypeId, LinkedHashMap::new, Collectors.toList()));
+    var seatsByType = freeSeats.stream()
+        .collect(Collectors.groupingBy(SeatSlot::seatTypeId));
+
+    var groups = passengers.stream()
+        .collect(Collectors.groupingBy(PassengerDto::purchaseId, LinkedHashMap::new, Collectors.toList()));
+
+    var resultSeatByBp = new HashMap<Long, Long>();
+
+    for (var samePurchase : groups.values()) {
+      var byType = samePurchase.stream()
+          .collect(Collectors.groupingBy(PassengerDto::seatTypeId, LinkedHashMap::new, Collectors.toList()));
+
       for (var e : byType.entrySet()) {
-        int seatType = e.getKey();
-        var pax = e.getValue();
-        for (var p : pax) if (p.seatId() != null) assignedByBp.put(p.boardingPassId(), p.seatId());
+        var type = e.getKey();
+        var pax = new ArrayList<>(e.getValue());
+        var freeRows = buildFreeRows(seatsByType.getOrDefault(type, List.of()));
 
-        var needing = pax.stream().filter(p -> p.seatId() == null).collect(Collectors.toList());
-        if (needing.isEmpty()) continue;
+        var minors = pax.stream()
+            .filter(p -> p.age() != null && p.age() < 18)
+            .collect(Collectors.toCollection(LinkedList::new));
+        var adults = pax.stream()
+            .filter(p -> p.age() == null || p.age() >= 18)
+            .collect(Collectors.toCollection(LinkedList::new));
 
-        var minors = needing.stream().filter(p -> p.age() != null && p.age() < 18).collect(Collectors.toCollection(LinkedList::new));
-        var adults = needing.stream().filter(p -> p.age() == null || p.age() >= 18).collect(Collectors.toCollection(LinkedList::new));
-        var fixedAdults = pax.stream().filter(p -> p.seatId() != null && (p.age() == null || p.age() >= 18)).toList();
-
-        var freeRows = freeByTypeByRow.getOrDefault(seatType, new TreeMap<>());
-        var usedNow = new HashSet<Long>();
-
-        for (var fa : fixedAdults) {
-          if (minors.isEmpty()) break;
-          var aSeat = seatById.get(fa.seatId());
-          if (aSeat == null) continue;
-          for (var nc : neighborColumns(aSeat.col())) {
-            var neigh = findSeat(freeRows, aSeat.row(), nc);
-            if (neigh != null) {
-              var m = minors.removeFirst();
-              assignedByBp.put(m.boardingPassId(), neigh.seatId());
-              markTaken(freeRows, neigh);
-              usedNow.add(neigh.seatId());
-              break;
-            }
-          }
-        }
-
-        if (!minors.isEmpty()) {
-          var rows = new ArrayList<>(freeRows.keySet());
-          boolean placed = false;
-          outer:
-          for (int i = 0; i < rows.size(); i++) {
-            var tmpAssigned = new HashMap<Long, Long>();
-            var tmpUsed = new HashSet<Long>();
-            var tmpFree = deepCopy(freeRows);
-
-            var minorsCopy = new LinkedList<>(minors);
-            var adultsCopy = new LinkedList<>(adults);
-
-            for (int j = i; j < rows.size() && (!minorsCopy.isEmpty() || !adultsCopy.isEmpty()); j++) {
-              int row = rows.get(j);
-              var pairs = listPairs(tmpFree.get(row));
-              while (!pairs.isEmpty() && !minorsCopy.isEmpty()) {
-                var pr = pairs.removeFirst();
-                if (!adultsCopy.isEmpty()) {
-                  var a = adultsCopy.removeFirst();
-                  tmpAssigned.put(a.boardingPassId(), pr.adultSeat.seatId());
-                  tmpUsed.add(pr.adultSeat.seatId());
-                  markTaken(tmpFree, pr.adultSeat);
-                }
-                var m = minorsCopy.removeFirst();
-                tmpAssigned.put(m.boardingPassId(), pr.minorSeat.seatId());
-                tmpUsed.add(pr.minorSeat.seatId());
-                markTaken(tmpFree, pr.minorSeat);
-              }
-              var list = tmpFree.getOrDefault(row, new ArrayList<>());
-              var it = list.iterator();
-              while (it.hasNext() && !adultsCopy.isEmpty()) {
-                var s = it.next();
-                if (tmpUsed.contains(s.seatId())) { it.remove(); continue; }
-                var a = adultsCopy.removeFirst();
-                tmpAssigned.put(a.boardingPassId(), s.seatId());
-                tmpUsed.add(s.seatId());
-                it.remove();
-              }
-            }
-
-            if (minorsCopy.isEmpty()) {
-              assignedByBp.putAll(tmpAssigned);
-              freeRows.clear(); freeRows.putAll(tmpFree);
-              usedNow.addAll(tmpUsed);
-              placed = true;
-              break outer;
-            }
-          }
-
-          if (!placed) {
-            while (!minors.isEmpty() && (!adults.isEmpty() || !fixedAdults.isEmpty())) {
-              var m = minors.removeFirst();
-              Long adultSeatId = null;
-              if (!adults.isEmpty() && assignedByBp.containsKey(adults.peekFirst().boardingPassId()))
-                adultSeatId = assignedByBp.get(adults.peekFirst().boardingPassId());
-              if (adultSeatId == null && !fixedAdults.isEmpty())
-                adultSeatId = fixedAdults.get(0).seatId();
-              boolean seated = false;
-              if (adultSeatId != null) {
-                var a = seatById.get(adultSeatId);
-                for (var nc : neighborColumns(a.col())) {
-                  var neigh = findSeat(freeRows, a.row(), nc);
-                  if (neigh != null) {
-                    assignedByBp.put(m.boardingPassId(), neigh.seatId());
-                    markTaken(freeRows, neigh);
-                    usedNow.add(neigh.seatId());
-                    seated = true;
-                    break;
-                  }
-                }
-              }
-              if (!seated) {
-                var any = takeAny(freeRows);
-                if (any != null) {
-                  assignedByBp.put(m.boardingPassId(), any.seatId());
-                  markTaken(freeRows, any);
-                  usedNow.add(any.seatId());
-                } else {
-                  break;
-                }
-              }
-            }
-            while (!adults.isEmpty()) {
-              var a = adults.removeFirst();
-              var any = takeAny(freeRows);
-              if (any == null) break;
-              assignedByBp.put(a.boardingPassId(), any.seatId());
-              markTaken(freeRows, any);
-              usedNow.add(any.seatId());
-            }
-          }
-        } else {
-          var rows = new ArrayList<>(freeRows.keySet());
-          for (int j = 0; j < rows.size() && !adults.isEmpty(); j++) {
-            int row = rows.get(j);
-            var list = freeRows.getOrDefault(row, new ArrayList<>());
-            var it = list.iterator();
-            while (it.hasNext() && !adults.isEmpty()) {
-              var s = it.next();
-              var a = adults.removeFirst();
-              assignedByBp.put(a.boardingPassId(), s.seatId());
-              it.remove();
-            }
-          }
-        }
+        while (minors.size() >= 2 && !adults.isEmpty() && takeTriad(freeRows, resultSeatByBp, adults, minors)) {}
+        while (!minors.isEmpty() && !adults.isEmpty() && takePair(freeRows, resultSeatByBp, adults, minors)) {}
+        while (!adults.isEmpty() && takeSingle(freeRows, resultSeatByBp, adults.removeFirst().boardingPassId())) {}
+        while (!minors.isEmpty() && takeSingle(freeRows, resultSeatByBp, minors.removeFirst().boardingPassId())) {}
       }
     }
 
     var out = new ArrayList<PassengerDto>(passengers.size());
     for (var p : passengers) {
-      var sid = p.seatId() != null ? p.seatId() : assignedByBp.get(p.boardingPassId());
+      Long sid = p.seatId() != null ? p.seatId() : resultSeatByBp.get(p.boardingPassId());
       out.add(new PassengerDto(
-        p.passengerId(), p.dni(), p.name(), p.age(), p.country(),
-        p.boardingPassId(), p.purchaseId(), p.seatTypeId(), sid
+          p.passengerId(), p.dni(), p.name(), p.age(), p.country(),
+          p.boardingPassId(), p.purchaseId(), p.seatTypeId(), sid
       ));
     }
     return out;
   }
 
-  private static class Pair {
-    final SeatSlot adultSeat;
-    final SeatSlot minorSeat;
-    Pair(SeatSlot a, SeatSlot m) { adultSeat = a; minorSeat = m; }
+  private static TreeMap<Integer, List<SeatSlot>> buildFreeRows(List<SeatSlot> list) {
+    var map = new TreeMap<Integer, List<SeatSlot>>();
+    for (var s : list) map.computeIfAbsent(s.row(), k -> new ArrayList<>()).add(s);
+    for (var row : map.values()) row.sort(Comparator.comparingInt(a -> "ABCDEF".indexOf(a.col())));
+    return map;
   }
 
-  private static LinkedList<Pair> listPairs(List<SeatSlot> freeRow) {
-    var out = new LinkedList<Pair>();
-    if (freeRow == null || freeRow.isEmpty()) return out;
-    SeatSlot A=null,B=null,C=null,D=null,E=null,F=null;
-    for (var s : freeRow) {
-      if (s.col().equals("A")) A=s;
-      else if (s.col().equals("B")) B=s;
-      else if (s.col().equals("C")) C=s;
-      else if (s.col().equals("D")) D=s;
-      else if (s.col().equals("E")) E=s;
-      else if (s.col().equals("F")) F=s;
-    }
-    if (A!=null && B!=null) out.add(new Pair(B, A));
-    if (B!=null && C!=null) out.add(new Pair(B, C));
-    if (D!=null && E!=null) out.add(new Pair(E, D));
-    if (E!=null && F!=null) out.add(new Pair(E, F));
-    return out;
-  }
-
-  private static SeatSlot findSeat(TreeMap<Integer, List<SeatSlot>> freeRows, int row, String col) {
-    var list = freeRows.get(row);
-    if (list == null) return null;
-    for (var s : list) if (s.col().equals(col)) return s;
-    return null;
-  }
-
-  private static void markTaken(TreeMap<Integer, List<SeatSlot>> freeRows, SeatSlot seat) {
-    var list = freeRows.get(seat.row());
-    if (list == null) return;
-    list.removeIf(s -> s.seatId().equals(seat.seatId()));
-  }
-
-  private static SeatSlot takeAny(TreeMap<Integer, List<SeatSlot>> freeRows) {
+  private static boolean takeTriad(TreeMap<Integer, List<SeatSlot>> freeRows, Map<Long,Long> out, Deque<PassengerDto> adults, Deque<PassengerDto> minors) {
     for (var e : freeRows.entrySet()) {
-      var list = e.getValue();
-      if (list.isEmpty()) continue;
-      return list.remove(0);
+      var row = e.getValue();
+
+      SeatSlot A = find(row,"A");
+      SeatSlot B = find(row,"B");
+      SeatSlot C = find(row,"C");
+      if (A!=null && B!=null && C!=null) {
+        var adult = adults.removeFirst();
+        var m1 = minors.removeFirst();
+        var m2 = minors.removeFirst();
+        out.put(adult.boardingPassId(), B.seatId());
+        out.put(m1.boardingPassId(), A.seatId());
+        out.put(m2.boardingPassId(), C.seatId());
+        row.remove(A); row.remove(B); row.remove(C);
+        return true;
+      }
+
+      SeatSlot D = find(row,"D");
+      SeatSlot E = find(row,"E");
+      SeatSlot F = find(row,"F");
+      if (D!=null && E!=null && F!=null) {
+        var adult = adults.removeFirst();
+        var m1 = minors.removeFirst();
+        var m2 = minors.removeFirst();
+        out.put(adult.boardingPassId(), E.seatId());
+        out.put(m1.boardingPassId(), D.seatId());
+        out.put(m2.boardingPassId(), F.seatId());
+        row.remove(D); row.remove(E); row.remove(F);
+        return true;
+      }
     }
+    return false;
+  }
+
+  private static boolean takePair(TreeMap<Integer, List<SeatSlot>> freeRows, Map<Long,Long> out, Deque<PassengerDto> adults, Deque<PassengerDto> minors) {
+    for (var e : freeRows.entrySet()) {
+      var row = e.getValue();
+
+      Pair AB = pair(row,"A","B");
+      if (AB!=null) {
+        var a = adults.removeFirst();
+        var m = minors.removeFirst();
+        out.put(a.boardingPassId(), AB.first.seatId());
+        out.put(m.boardingPassId(), AB.second.seatId());
+        row.remove(AB.first); row.remove(AB.second);
+        return true;
+      }
+
+      Pair BC = pair(row,"B","C");
+      if (BC!=null) {
+        var a = adults.removeFirst();
+        var m = minors.removeFirst();
+        out.put(a.boardingPassId(), BC.first.seatId());
+        out.put(m.boardingPassId(), BC.second.seatId());
+        row.remove(BC.first); row.remove(BC.second);
+        return true;
+      }
+
+      Pair DE = pair(row,"D","E");
+      if (DE!=null) {
+        var a = adults.removeFirst();
+        var m = minors.removeFirst();
+        out.put(a.boardingPassId(), DE.first.seatId());
+        out.put(m.boardingPassId(), DE.second.seatId());
+        row.remove(DE.first); row.remove(DE.second);
+        return true;
+      }
+
+      Pair EF = pair(row,"E","F");
+      if (EF!=null) {
+        var a = adults.removeFirst();
+        var m = minors.removeFirst();
+        out.put(a.boardingPassId(), EF.first.seatId());
+        out.put(m.boardingPassId(), EF.second.seatId());
+        row.remove(EF.first); row.remove(EF.second);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean takeSingle(TreeMap<Integer, List<SeatSlot>> freeRows, Map<Long,Long> out, Long bpId) {
+    for (var e : freeRows.entrySet()) {
+      var row = e.getValue();
+      if (!row.isEmpty()) {
+        var s = row.remove(0);
+        out.put(bpId, s.seatId());
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static SeatSlot find(List<SeatSlot> row, String col) {
+    for (var s : row) if (s.col().equals(col)) return s;
     return null;
   }
 
-  private static List<String> neighborColumns(String c) {
-    var cols = "ABCDEF";
-    int i = cols.indexOf(c.charAt(0));
-    if (i < 0) return List.of();
-    if (i <= 2) {
-      if (i == 0) return List.of("B");
-      if (i == 1) return List.of("A", "C");
-      return List.of("B");
-    } else {
-      if (i == 3) return List.of("E");
-      if (i == 4) return List.of("D", "F");
-      return List.of("E");
-    }
+  private static Pair pair(List<SeatSlot> row, String c1, String c2) {
+    var a = find(row,c1);
+    var b = find(row,c2);
+    if (a!=null && b!=null) return new Pair(a,b);
+    return null;
   }
 
-  private static int colIndex(String c) {
-    var cols = "ABCDEF";
-    return cols.indexOf(c.charAt(0));
-  }
-
-  private static TreeMap<Integer, List<SeatSlot>> deepCopy(TreeMap<Integer, List<SeatSlot>> src) {
-    var copy = new TreeMap<Integer, List<SeatSlot>>();
-    for (var e : src.entrySet()) copy.put(e.getKey(), new ArrayList<>(e.getValue()));
-    return copy;
-  }
+  private record Pair(SeatSlot first, SeatSlot second) {}
 }

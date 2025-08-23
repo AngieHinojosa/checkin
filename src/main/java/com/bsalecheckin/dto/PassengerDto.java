@@ -7,7 +7,7 @@ public record PassengerDto(
   Integer age,
   String country,
   Long boardingPassId,
-  Long purchaseId,
+  Integer purchaseId,
   Integer seatTypeId,
   Long seatId
 ) {}

@@ -1,53 +1,41 @@
 package com.bsalecheckin.service;
 
-import com.bsalecheckin.dto.FlightData;
 import com.bsalecheckin.dto.PassengerDto;
+import com.bsalecheckin.dto.SeatSlot;
+import com.bsalecheckin.exception.DatabaseUnavailableException;
 import com.bsalecheckin.exception.FlightNotFoundException;
-import com.bsalecheckin.repository.FlightRepository;
-import com.bsalecheckin.repository.PassengerRepository;
-import com.bsalecheckin.repository.SeatRepository;
+import com.bsalecheckin.repository.DataRepository;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 
 @Service
 public class FlightService {
-  private final FlightRepository flights;
-  private final PassengerRepository passengers;
-  private final SeatRepository seats;
+  private final DataRepository repo;
 
-  public FlightService(FlightRepository flights, PassengerRepository passengers, SeatRepository seats) {
-    this.flights = flights;
-    this.passengers = passengers;
-    this.seats = seats;
+  public FlightService(DataRepository repo) {
+    this.repo = repo;
   }
 
-  public FlightData getFlightData(Long flightId) {
-    var row = flights.findRowById(flightId).orElseThrow(FlightNotFoundException::new);
-    var pax = passengers.findByFlight(flightId);
-    var data = toFlightData(row, pax);
-    var allSeats = seats.findByAirplane(data.airplaneId());
-    var assigned = new SeatAssigner(allSeats, data.passengers()).assign();
-    return new FlightData(
-      data.flightId(),
-      data.takeoffDateTime(),
-      data.takeoffAirport(),
-      data.landingDateTime(),
-      data.landingAirport(),
-      data.airplaneId(),
-      assigned
-    );
+  public Map<String,Object> getFlightData(Long flightId) {
+    try {
+      var infoOpt = repo.findFlightInfo(flightId);
+      if (infoOpt.isEmpty()) throw new FlightNotFoundException();
+      var info = new HashMap<>(infoOpt.get());
+      var passengers = repo.findPassengersByFlight(flightId);
+      var airplaneId = (Long) info.get("airplaneId");
+      var seats = repo.findSeatsByAirplane(airplaneId);
+      var assigned = assign(passengers, seats);
+      info.put("passengers", assigned);
+      return info;
+    } catch (DataAccessException e) {
+      throw new DatabaseUnavailableException(e);
+    }
   }
 
-  private FlightData toFlightData(Object[] r, List<PassengerDto> pax) {
-    return new FlightData(
-      ((Number) r[0]).longValue(),
-      ((Number) r[1]).intValue(),
-      (String) r[2],
-      ((Number) r[3]).intValue(),
-      (String) r[4],
-      ((Number) r[5]).longValue(),
-      pax
-    );
+  private List<PassengerDto> assign(List<PassengerDto> passengers, List<SeatSlot> seats) {
+    var assigner = new SeatAssigner(seats, passengers);
+    return assigner.assignAll();
   }
 }

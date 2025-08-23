@@ -1,7 +1,5 @@
 package com.bsalecheckin.dto;
 
-public record FlightResponse(
-  Integer code,
-  Object data,
-  String errors
-) {}
+import java.util.Map;
+
+public record FlightResponse(int code, Map<String,Object> data, String errors) {}
