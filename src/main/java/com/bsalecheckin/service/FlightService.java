@@ -22,7 +22,8 @@ public class FlightService {
     try {
       var infoOpt = repo.findFlightInfo(flightId);
       if (infoOpt.isEmpty()) throw new FlightNotFoundException();
-      var info = new HashMap<>(infoOpt.get());
+
+      var info = new LinkedHashMap<>(infoOpt.get());
       var passengers = repo.findPassengersByFlight(flightId);
       var airplaneId = (Long) info.get("airplaneId");
       var seats = repo.findSeatsByAirplane(airplaneId);

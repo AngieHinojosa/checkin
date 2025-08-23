@@ -19,21 +19,21 @@ public class DataRepository {
     var sql = """
       select f.flight_id,
              f.takeoff_date_time,
+             f.takeoff_airport,
              f.landing_date_time,
-             f.airplane_id,
-             f.takeoff_airport as takeoff_airport,
-             f.landing_airport as landing_airport
+             f.landing_airport,
+             f.airplane_id
       from flight f
       where f.flight_id = ?
     """;
     var list = jdbc.query(sql, (rs, n) -> {
-      var m = new HashMap<String,Object>();
+      var m = new LinkedHashMap<String,Object>();
       m.put("flightId", rs.getLong("flight_id"));
       m.put("takeoffDateTime", rs.getLong("takeoff_date_time"));
-      m.put("landingDateTime", rs.getLong("landing_date_time"));
-      m.put("airplaneId", rs.getLong("airplane_id"));
       m.put("takeoffAirport", rs.getString("takeoff_airport"));
+      m.put("landingDateTime", rs.getLong("landing_date_time"));
       m.put("landingAirport", rs.getString("landing_airport"));
+      m.put("airplaneId", rs.getLong("airplane_id"));
       return m;
     }, flightId);
     if (list.isEmpty()) return Optional.empty();
