@@ -74,7 +74,7 @@ Si no hay asientos contiguos suficientes, se degradan los intentos (parejas, lue
 
 **Vuelo de ejemplo (200):** https://bsale-checkin-li86.onrender.com/flights/1/passengers 
 
-**Vuelo no encontrado (404):** https://bsale-check-inli86.onrender.com/flights/999999/passengers 
+**Vuelo no encontrado (404):** https://bsale-checkin-li86.onrender.com/flights/999999/passengers
   
   Respuesta: `{ "code": 404, "data": {} }`
 
