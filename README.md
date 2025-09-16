@@ -1,4 +1,4 @@
-# Bsale Check-in API 
+Check-in API 
 
 API REST para simular el check‑in de pasajeros de Andes Airlines leyendo desde una base MySQL solo lectura y asignando asientos según reglas del desafío.
 
